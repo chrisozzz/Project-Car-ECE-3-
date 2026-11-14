@@ -96,8 +96,8 @@ void loop() {
     LSpeed *= -1;
   }
 
-  analogWrite(left_pwm_pin, constrain(LSpeed, 0, 255));
-  analogWrite(right_pwm_pin, constrain(RSpeed, 0, 255));
+  setMotor(left_dir_pin,  left_pwm_pin,  LSpeed);
+  setMotor(right_dir_pin, right_pwm_pin, RSpeed);
 
   prevError = error;
 }
@@ -122,3 +122,11 @@ void kdLED(float kd_error){
   }
 }
 
+void setMotor(int dirPin, int pwmPin, int spd) {
+  if (spd >= 0) {
+    digitalWrite(dirPin, LOW);    // forward
+  } else {
+    digitalWrite(dirPin, HIGH);   // backward
+  }
+  analogWrite(pwmPin, constrain(abs(spd), 0, 255));
+}
