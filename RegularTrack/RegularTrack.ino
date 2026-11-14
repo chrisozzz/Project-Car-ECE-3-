@@ -97,4 +97,28 @@ void loop() {
   }
 
   analogWrite(left_pwm_pin, constrain(LSpeed, 0, 255));
+  analogWrite(right_pwm_pin, constrain(RSpeed, 0, 255));
+
+  prevError = error;
 }
+
+void kpLED(float kp_error){
+  if(kp_error > 0){
+    digitalWrite(YLED_Front_Right, HIGH);
+    digitalWrite(YLED_Front_Left, LOW);
+  }else if(kp_error < 0){
+    digitalWrite(YLED_Front_Left, HIGH);
+    digitalWrite(YLED_Front_Right, LOW);
+  }
+}
+
+void kdLED(float kd_error){
+  if(kd_error > 0){
+    digitalWrite(RLED_Back_Right, HIGH);
+    digitalWrite(RLED_Back_Left, LOW);
+  }else if(kd_error < 0){
+    digitalWrite(RLED_Back_Left, HIGH);
+    digitalWrite(RLED_Back_Right, LOW);
+  }
+}
+
