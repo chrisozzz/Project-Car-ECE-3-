@@ -1,17 +1,21 @@
 #include <ECE3.h>
 #define TRACK_COTA 1
 #define TRACK_DRAG 2
-#define SELECTED_TRACK TRACK_DRAG
+#define SELECTED_TRACK TRACK_COTA
 
 uint16_t sensorValues[8];
 const uint16_t MAX_VALUES[8] = { 1911, 1911, 1911, 1911, 1910, 1933, 1888, 1883 };
 const uint16_t MIN_VALUES[8] = {  635,  589,  612,  635,  589,  589,  589,  544 };
 const int8_t WEIGHTS[8] =      {  -15,  -14,  -12,   -8,    8,   12,   14,   15 };
 
+//Kp Is for TURNS
+// Kd is for WOBBLE
+
 #if SELECTED_TRACK == TRACK_COTA
-const float kp = 0.05;
-const float kd = 0.015;
-const int BASE_SPD = 20;
+const float kp = 0.065;
+const float kd = 0.3; //decrease kd a bit more
+const int BASE_SPD = 70; // increase speed more
+
 #elif SELECTED_TRACK == TRACK_DRAG
 const float kp = 0.1;
 const float kd = 1.00;
@@ -22,14 +26,14 @@ int setBaseSpeed(int);
 void moveCar(int, int);
 void turn180();
 void kpLED(float);
-void kdLED(float);
+void redLED();
 
 //Best Drag Track: BASE_SPD = 200, Kd = 1.00, Kp = 0.1
 //Best CoA Track: BASE_SPD = 20, Kd = 0.015, Kp = 0.05
 // const int BASE_SPD = 20;
 const int MAX_SPD = 255;
-int prevError = 0;
-int error = 0;
+float prevError = 0;
+float error = 0;
 int RSpeed;
 int LSpeed;
 // float kp = 0.1;
@@ -59,7 +63,6 @@ const int BUMP0_pin = 24;
 const int BUMP1_pin = 25;
 
 
-
 /* TODO
 1. How to make it turn around and do a 180* turn
     a. there is a wide black line where that indicates the end.
@@ -70,8 +73,6 @@ const int BUMP1_pin = 25;
 3. Change base speed based on error?
     ie. small error increase
     large error : decrease
-
-
 */
 
 
@@ -85,7 +86,6 @@ void setup() {
   pinMode(right_dir_pin,OUTPUT);
   pinMode(right_pwm_pin,OUTPUT);
   
-
   //LOW is FORWARD, HIGH is BACK
   digitalWrite(left_dir_pin,LOW);
   digitalWrite(right_dir_pin,LOW);
@@ -105,35 +105,25 @@ void loop() {
 
   ECE3_read_IR(sensorValues);
   
-  int normalizedError = 0;
-  int weightedError = 0;
-  int endMarkerError = 0;
+  float normalizedError = 0;
+  float weightedError = 0;
+  float endMarkerError = 0;
+
   for(int i = 0; i < 8; i++){
-    normalizedError = (1000 * max(sensorValues[i] - MIN_VALUES[i], 0)) / (MAX_VALUES[i] - MIN_VALUES[i]);
+    normalizedError = (1000 * max(sensorValues[i] - MIN_VALUES[i], 0)) / (float)(MAX_VALUES[i] - MIN_VALUES[i]);
     endMarkerError += normalizedError;
     weightedError = (normalizedError * WEIGHTS[i])/8; //Using 15-14-12-8 / 8 Weight Scheme
     error += weightedError;
   }
-  /*
-  PSEUDO CODE:
-  if( all black ){ somehow check error?
-    if( first trigger = true ){
-      second trigger = true; (We know its the end now)
-    } else {
-      first trigger = true;
-    }
-  }
 
-  ACTUAL CODE PROTOTYPE:
-  if((endMarkerError / 8) >= 800){ --> Average of all sensors > 800 (magic number) (do testing to find proper val)
-    if(trackEndTriggered){
-      trackEndReal = true;
-    }else{
-      trackEndTriggered = true;
-      redLED();
-    }
-  }
-  */
+  // if((endMarkerError / 8) >= 800){ //--> Average of all sensors > 800 (magic number) (do testing to find proper val)
+  //   if(trackEndedTriggered){
+  //     trackEndedReal = true;
+  //   }else{
+  //     trackEndedTriggered = true;
+  //     redLED();
+  //   }
+  // }
 
   float kp_error = error * kp;
   float kd_error = (error - prevError) * kd;
@@ -141,36 +131,37 @@ void loop() {
   float pd_sum = kp_error + kd_error;
 
   
-  kpLED(kp_error); //Might make it slow....
+  kpLED(kp_error);
   
   LSpeed = BASE_SPD - pd_sum;
   RSpeed = BASE_SPD + pd_sum;
 
-  moveCar(RSpeed, LSpeed);
-  /*if(trackEndReal){
-      180turn();
-      moveCar(BASE_SPD, BASE_SPD);
+  // if(trackEndedReal){
+  //   turn180();
+  //   moveCar(BASE_SPD, BASE_SPD);
 
-      trackEndTriggered = false;
-      trackEndReal = false;
-      }else{
-        moveCar(RSpeed, LSpeed);
-      }
-  */
+  //   trackEndedTriggered = false;
+  //   trackEndedReal = false;
+  // }else{
+  //   moveCar(RSpeed, LSpeed);
+  // }
+  moveCar(RSpeed, LSpeed);
+  
   prevError = error;
 }
 
 void moveCar(int RSpeed, int LSpeed){
+  
   if(RSpeed < 0){
-    digitalWrite(right_dir_pin, LOW);
+    digitalWrite(right_dir_pin, HIGH);
   }else{
-    digitalWrite(right_dir_pin,HIGH);
+    digitalWrite(right_dir_pin,LOW);
   }
   
   if(LSpeed < 0){
-    digitalWrite(left_dir_pin, LOW);
+    digitalWrite(left_dir_pin, HIGH);
   }else{
-    digitalWrite(left_dir_pin,HIGH);
+    digitalWrite(left_dir_pin,LOW);
   }
 
   analogWrite(left_pwm_pin, constrain(abs(LSpeed), 0, 255));
@@ -195,14 +186,11 @@ void turn180(){
 int setBaseSpeed(int error){
   int e = abs(error);
 
-  /* GPT Example:
-  if (e < 15) return 150;
-  if (e < 40) return 110;
-  if (e < 80) return 75;
+  if (e < 150) return 150;
+  if (e < 300) return 70;
+  if (e < 600) return 40;
 
-  return 50;
-  */
-  return 0;
+  return 20;
 }
 
 void kpLED(float kp_error){
