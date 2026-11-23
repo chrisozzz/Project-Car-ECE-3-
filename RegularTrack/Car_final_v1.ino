@@ -7,7 +7,7 @@ uint16_t sensorValues[8];
 const uint16_t MAX_VALUES[8] = { 1911, 1911, 1911, 1911, 1910, 1933, 1888, 1883 };
 const uint16_t MIN_VALUES[8] = {  635,  589,  612,  635,  589,  589,  589,  544 };
 const int8_t WEIGHTS[8] =      {  -15,  -14,  -12,   -8,    8,   12,   14,   15 };
-float Variable_Store[5000][2];
+float Variable_Store[2000][2];
 int arrCounter = 0;
 
 // Kp is for TURNS
@@ -16,7 +16,7 @@ int arrCounter = 0;
 #if SELECTED_TRACK == TRACK_COTA
 const float kp = 0.065;
 const float kd = 0.3; //decrease kd a bit more
-const int BASE_SPD = 70; // increase speed more
+const int BASE_SPD = 100;
 
 #elif SELECTED_TRACK == TRACK_DRAG
 const float kp = 0.1;
@@ -35,6 +35,7 @@ float prevError = 0;
 float error = 0;
 int RSpeed;
 int LSpeed;
+int curr_speed = 100;
 bool trackEndTriggered = false;
 bool insideEnd = false;
 
@@ -106,15 +107,16 @@ void loop() {
     weightedError = (normalizedError * WEIGHTS[i])/8; //Using 15-14-12-8 / 8 Weight Scheme
     error += weightedError;
   }
-  
-  if(arrCounter < 5000){
+  //The minimum error is -19.0 for some reason. Might need to redo sensor fusion?
+
+  // Not really helpful
+  if(arrCounter < 2000){
     Variable_Store[arrCounter][0] = error;
     Variable_Store[arrCounter][1] = getBaseSpeed();
     arrCounter++;
   }
 
-  if(endMarkerError >= 9000){ //End Marker Threshold
-  //if we include the moving car inside the else; it'll ignore this sensor read.
+  if(endMarkerError >= 11000){ //End Marker Threshold; why 11,000? idk
     if(trackEndTriggered && insideEnd){
       digitalWrite(RLED_Back_Left, HIGH);
       moveCar(0,0);
@@ -138,6 +140,7 @@ void loop() {
   float pd_sum = kp_error + kd_error;
   kpLED(kp_error);
   
+
   LSpeed = BASE_SPD - pd_sum; // change to getBaseSpeed() - pd_sum
   RSpeed = BASE_SPD + pd_sum; // change to getBaseSpeed() + pd_sum
   //Need to capture data in turns and straights, need to make capture code
@@ -171,12 +174,11 @@ void moveCar(int RSpeed, int LSpeed){
 }
 
 void turn180(){
-  delay(500); //just a magic # delay; can decrease to save time;
+  //delay(50); //just a magic # delay; can decrease to save time;
 
   int leftEncoderCount = 0;
   resetEncoderCount_left();
-  //305 experimentally determined to be most accurate @ 255 spd, 9 V
-  // Might need to increase for less Volts.
+ 
   while(abs(leftEncoderCount) < 305){
     moveCar(MAX_SPD, -MAX_SPD);
     leftEncoderCount = getEncoderCount_left();
@@ -188,13 +190,22 @@ int getBaseSpeed(){
   //abs(error) on the range 0 - 10000
   int e = abs(error);
 
-  if (e < 500) return 255;
-  if (e < 1000) return 200;
-  if (e < 1500) return 150;
-  if (e < 3000) return 70;
-  if (e < 6000) return 40;
-
-  return 30;
+  if (e < 700) curr_speed += 10;
+  if (e < 3000) curr_speed += 2;
+  if (e < 4000) curr_speed += -2;
+  if (e < 8000) curr_speed += -5;
+  // if (e < 3000) return 70;
+  // if (e < 5000) return 40;
+  // if (e < 8000) return 30;
+  Serial.println(curr_speed);
+  
+  if(curr_speed > 240){
+    curr_speed = 240;
+  }else if(curr_speed < 0){
+    curr_speed = 0;
+  }
+  
+  return curr_speed;
 }
 
 void readData(){
@@ -202,8 +213,8 @@ void readData(){
   while(true){
     if(!digitalRead(PUSH2)){
       for(int i = 0; i < 5000; i++){
-        Serial.print(Variable_Store[i][0]);Serial.print("\t");
-        Serial.print(Variable_Store[i][1]);Serial.print("\t");
+        Serial.print(Variable_Store[i][0]);Serial.print("\t\t");
+        Serial.print(Variable_Store[i][1]);Serial.print("\t\t");
         Serial.print(10000);Serial.print("\t");
         Serial.println(-200);
       }
